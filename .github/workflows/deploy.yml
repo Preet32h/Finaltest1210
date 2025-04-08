@@ -1,69 +1,31 @@
-name: Deploy to ECS Fargate
+name: Deploy to ECS
 
 on:
   push:
-    branches:
-      - main
-      - dev
-
-env:
-  AWS_REGION: us-east-1
-  ECR_REPO: singh-final-api
-  ECS_CLUSTER: SinghFinalCluster
-  ECS_SERVICE: SinghFinalService
-  ECS_TASK_DEF: taskdef.json
+    branches: [main]
 
 jobs:
-  deploy:
-    name: Build, Push, and Deploy
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        role-to-assume: arn:aws:iam::536697260132:role/GitHubActionsDeploymentRole
-        aws-region: ${{ env.AWS_REGION }}
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v1
 
-    - name: Log in to Amazon ECR
-      uses: aws-actions/amazon-ecr-login@v1
+      - name: Build, Tag, Push image to ECR
+        run: |
+          IMAGE_TAG=latest
+          docker build -t singh-final-api:$IMAGE_TAG .
+          docker tag singh-final-api:$IMAGE_TAG 536697260132.dkr.ecr.us-east-1.amazonaws.com/singh-final-api:$IMAGE_TAG
+          docker push 536697260132.dkr.ecr.us-east-1.amazonaws.com/singh-final-api:$IMAGE_TAG
 
-    - name: Build Docker image
-      run: |
-        IMAGE_TAG=latest
-        docker build -t $ECR_REPO:$IMAGE_TAG .
-        docker tag $ECR_REPO:$IMAGE_TAG ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:$IMAGE_TAG
-
-    - name: Push image to Amazon ECR
-      run: |
-        docker push ${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:latest
-
-    - name: Update ECS Task Definition
-      run: |
-        aws ecs describe-task-definition \
-          --task-definition $ECS_TASK_DEF > task-def.json
-
-        IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/$ECR_REPO:latest
-
-        jq ".taskDefinition.containerDefinitions[0].image = \"$IMAGE_URI\"" task-def.json > new-task-def.json
-
-        jq ".taskDefinition | {family, containerDefinitions, executionRoleArn, networkMode, requiresCompatibilities, cpu, memory}" new-task-def.json > updated-taskdef.json
-
-        aws ecs register-task-definition \
-          --cli-input-json file://updated-taskdef.json > output.json
-
-        TASK_REVISION=$(jq -r '.taskDefinition.taskDefinitionArn' output.json)
-
-        aws ecs update-service \
-          --cluster $ECS_CLUSTER \
-          --service $ECS_SERVICE \
-          --task-definition $TASK_REVISION
-
-    - name: (Optional) Terraform Apply
-      if: github.ref == 'refs/heads/main'
-      run: |
-        terraform init
-        terraform apply -auto-approve
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ecs-task-definition.json
+          service: singh-api-service
+          cluster: singh-cluster
+          wait-for-service-stability: true
