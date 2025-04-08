@@ -12,10 +12,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Login to AWS ECR
-        uses: aws-actions/amazon-ecr-login@v1
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
         with:
-          region: us-east-1  # Specifying AWS region
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1  # Specify AWS region
+
+      - name: Login to AWS ECR
+        run: |
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 536697260132.dkr.ecr.us-east-1.amazonaws.com
 
       - name: Build, Tag, Push image to ECR
         run: |
