@@ -12,8 +12,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Login to ECR
+      - name: Login to AWS ECR
         uses: aws-actions/amazon-ecr-login@v1
+        with:
+          region: us-east-1  # Specifying AWS region
 
       - name: Build, Tag, Push image to ECR
         run: |
